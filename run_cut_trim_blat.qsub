@@ -1,0 +1,120 @@
+#!/bin/bash
+# These are the PBS directives for cluster scheduler. 
+# If you are running without a scheduler, you can remove these lines, or just leave them in and should be ok.
+# Adjust these as needed for your scheduler or resources.
+#PBS -N Get_reads
+#PBS -M <Your e-mail>
+#PBS -m abe
+#PBS -o trim_filter_blat.out
+#PBS -j oe
+#PBS -l nodes=1:ppn=4
+#PBS -l pmem=4gb
+#PBS -l walltime=72:00:00
+
+# =====================================================
+#  This script runs the series of steps to go from raw reads to reads that match a reference.
+#  The steps are:
+#    1. Use cutadapt to remove adapters
+#    2. Use sickle to filter reads
+#    3. Use blat to identify reads with hit to reference(s)
+#    4. Use script to pull the reads with hits into new files.
+#
+#  Matt Gitzendanner
+#  University of Florida
+#  magitz@ufl.edu
+#  2/19/14
+#
+#  Usage: 
+#     To submit to scheduler: qsub run_cut_trim_blat.qsub
+#     To run from command line: bash run_cut_trim_blat.qsub
+#
+# Dependancies:
+#   cutadapt https://cutadapt.readthedocs.org/en/stable/
+#   sickle https://github.com/najoshi/sickle
+#   blat https://genome.ucsc.edu/FAQ/FAQblat.html
+#   fastx_toolkit http://hannonlab.cshl.edu/fastx_toolkit/
+#   python https://www.python.org/
+#   get_reads_w_blat_hits.py https://github.com/soltislab/get_BLAT_reads
+# =====================================================
+
+
+#Control where to start the process (1 is beginning):
+start_step=1
+
+#If run under PBS scheduler, change to the directory where the job was launched from
+[[ -d $PBS_O_WORKDIR ]] && cd $PBS_O_WORKDIR
+
+
+#Use modules to load the needed modules
+#If you do not have lmod installed make sure these applications are in your PATH; and delete these lines.
+module load cutadapt
+module load sickle
+module load blat
+module load fastx_toolkit
+module load python
+
+#Run cutadapt; before running change the folder location to where the raw reads are.
+#Reads should be in current directory and in .gz format. They should be the only .gz files in the directory.
+if [[ $start_step -le 1 ]]
+then
+
+	#Make folders for output
+	for output in adapter_trimmed blat_to_refs pulled_reads trimmed_filtered
+	do
+		if [ ! -d $output ]
+		  then
+			mkdir $output
+		fi
+	done
+
+
+	for file in *.gz
+	do
+		echo "Running cutadapt on $file"
+		name=`basename $file .fastq.gz`
+		cutadapt -b AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC $file > adapter_trimmed/$name.fq
+	done
+fi
+
+#run sickle
+if [[ $start_step -le 2 ]]
+then
+	for file in adapter_trimmed/*_R1.fq
+	do
+		name=`basename $file _R1.fq`
+		echo "Running sickle on $name"
+		forward=$name"_R1.fq"
+		reverse=$name"_R2.fq"
+		single=$name"_singletons.fq"
+		sickle pe -f adapter_trimmed/$forward -r adapter_trimmed/$reverse -t sanger -o trimmed_filtered/$forward -p trimmed_filtered/$reverse -s trimmed_filtered/$single
+	done
+fi
+
+#run blat, need to change the blat file name to whatever fasta file contains the reference sequences
+if [[ $start_step -le 3 ]]
+then
+	for file in trimmed_filtered/*_R1.fq
+	do
+		name=`basename $file _R1.fq`
+		echo "Running blat on $name"
+		forward=$name"_R1"
+		reverse=$name"_R2"
+		single=$name"_singletons"
+		fastq_to_fasta -Q 33 -n -i trimmed_filtered/$forward.fq | blat *.fasta stdin -noHead -t=DNA -q=DNA blat_to_refs/$forward.psl
+		fastq_to_fasta -Q 33 -n -i trimmed_filtered/$reverse.fq | blat*.fasta stdin -noHead -t=DNA -q=DNA blat_to_refs/$reverse.psl
+		fastq_to_fasta -Q 33 -n -i trimmed_filtered/$single.fq | blat *.fasta stdin -noHead -t=DNA -q=DNA blat_to_refs/$single.psl
+	done
+fi
+
+
+#Run get_reads_w_blat_hits.py
+if [[ $start_step -le 4 ]]
+then
+	for file in blat_to_refs/*_R1.psl
+	do		
+		name=`basename $file R1.psl`
+		echo "Pulling reads with hits for $name"
+	 	python get_reads_w_blat_hit_pe.py -b blat_to_refs/$name -r trimmed_filtered/ -o pulled_reads
+	done
+fi
+
