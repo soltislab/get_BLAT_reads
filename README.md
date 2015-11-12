@@ -2,7 +2,9 @@
 Scripts to cleanup NGS reads, BLAT to reference and pull the matching reads
 
 Written by Matt Gitzendanner
+
 University of Florida
+
 magitz@ufl.edu
 
 # get_reads_w_blat_hit_pe.py
