@@ -19,6 +19,7 @@ import os, errno
 #  University of Florida
 #  magitz@ufl.edu
 #  2/19/14
+#  4/19/21 - Updated for Python3
 #
 # =====================================================
 
@@ -47,7 +48,7 @@ def add_to_list(psl_file):
 	try:
 		BLAT=open(psl_file, 'r')
 	except IOError:
-		print "Can't open file:", psl_file
+		print (f"Can't open file: {psl_file}")
 
 	for Line in BLAT :
 		Line = Line.strip('\n')
@@ -64,12 +65,12 @@ def get_reads(reads_file,out_file):
 	try:
 		READS=open(reads_file, 'r')
 	except IOError:
-		print "Can't open file:", reads_file
+		print (f"Can't open file: {reads_file}")
 
 	try:
 		OUT=open(out_file, 'w')
 	except IOError:
-		print "Can't open file:", out_file
+		print ("Can't open file: {out_file}")
 	
 	for record in SeqIO.parse(READS, "fastq") :
 		if record.id in read_list:
@@ -78,7 +79,7 @@ def get_reads(reads_file,out_file):
 #Make the output directory if it's not already made.
 try:
 	os.makedirs(out_dir)
-except OSError, err:
+except OSError as err:
     # Reraise the error unless it's about an already existing directory 
     if err.errno != errno.EEXIST or not os.path.isdir(out_dir): 
         raise
